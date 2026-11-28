@@ -1,4 +1,5 @@
-MONGO_URI=mongodb://127.0.0.1:27017/arthflow
 JWT_SECRET=replace_with_a_long_random_secret
 JWT_EXPIRES_IN=30d
-CLIENT_URL=http://localhost:8787
+CLIENT_URL=http://localhost:5000
+
+# The D1 database is bound as DB in wrangler.jsonc. MONGO_URI is no longer used.

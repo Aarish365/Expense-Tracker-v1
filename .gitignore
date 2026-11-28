@@ -19,6 +19,9 @@ server/.env.local
 client/dist/
 dist/
 
+# Generated D1 seed SQL (created by server/utils/seed.js)
+server/db/seed.generated.sql
+
 # Logs
 *.log
 npm-debug.log*

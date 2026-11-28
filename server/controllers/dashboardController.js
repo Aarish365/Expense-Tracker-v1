@@ -1,12 +1,12 @@
-const Transaction = require('../models/Transaction');
-const Budget = require('../models/Budget');
+const { dbOf, listTransactions, getBudget } = require('../db/store');
 const { monthKey, lastNMonths } = require('../utils/dateHelpers');
 
 // GET /api/dashboard
-// Every number here is calculated from the logged-in user's MongoDB transactions.
+// Every number here is calculated from the logged-in user's D1 transactions.
 const getDashboard = async (req, res) => {
   try {
-    const transactions = await Transaction.find({ userId: req.user.id }).lean();
+    const db = dbOf(req);
+    const transactions = await listTransactions(db, { userId: req.user.id });
 
     let totalIncome = 0;
     let totalExpenses = 0;
@@ -51,12 +51,7 @@ const getDashboard = async (req, res) => {
       .slice(0, 5);
 
     const now = new Date();
-    const budget = await Budget.findOne({
-      userId: req.user.id,
-      month: now.getMonth() + 1,
-      year: now.getFullYear(),
-    });
-
+    const budget = await getBudget(db, req.user.id, now.getMonth() + 1, now.getFullYear());
     const budgetAmount = budget ? budget.amount : 0;
 
     return res.json({

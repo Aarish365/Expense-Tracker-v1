@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { dbOf, findUserById } = require('../db/store');
 
 // Add this middleware to any route that needs a logged-in user.
 const protect = async (req, res, next) => {
@@ -12,7 +12,7 @@ const protect = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
+    const user = await findUserById(dbOf(req), decoded.id);
 
     if (!user) {
       return res.status(401).json({ message: 'User no longer exists. Please log in again.' });

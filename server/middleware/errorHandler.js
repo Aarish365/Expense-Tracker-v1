@@ -5,21 +5,10 @@ const notFound = (req, res) => {
 const errorHandler = (error, req, res, next) => {
   console.error(error);
 
-  // Mongoose rejected a value defined in the schema (enum, min, required...)
-  if (error.name === 'ValidationError') {
-    const messages = Object.values(error.errors).map((item) => item.message);
-    return res.status(400).json({ message: messages[0], errors: messages });
-  }
-
-  // Invalid MongoDB id
-  if (error.name === 'CastError') {
-    return res.status(400).json({ message: 'Invalid id format' });
-  }
-
-  // Duplicate value (for example, the same email twice)
-  if (error.code === 11000) {
-    const field = Object.keys(error.keyValue || {})[0] || 'value';
-    return res.status(400).json({ message: `${field} is already in use` });
+  // SQLite/D1 unique constraint. Route-level checks handle the common cases with
+  // friendlier messages; this is a safe fallback.
+  if (error.message && /UNIQUE constraint failed/i.test(error.message)) {
+    return res.status(400).json({ message: 'A record with this value already exists' });
   }
 
   return res.status(error.status || 500).json({

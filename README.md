@@ -1,299 +1,284 @@
 # ArthFlow
 
-A simple, beginner-friendly **Personal Finance Tracker** built with the MERN stack. Track income, expenses, categories, monthly budgets and reports — all stored in MongoDB and served through real REST APIs.
+ArthFlow is a simple, personal finance tracker built for clarity: log income and expenses, manage categories, set monthly budgets, and see clear reports in Indian Rupees.
 
-Everything is displayed in **Indian Rupees (₹)** using `Intl.NumberFormat('en-IN', ...)`.
-
----
+Everything runs on **Cloudflare**: the React site, the Express API, and the database (**Cloudflare D1**). No MongoDB Atlas account and no connection string are needed.
 
 ## Features
 
-- **Authentication** — register, log in, log out, JWT-protected routes, bcrypt password hashing
-- **Dashboard** — total balance, income, expenses and savings, 6-month bar chart, expense pie chart, recent transactions, current-month overview
-- **Transactions** — add income/expense, edit, delete, search by title, filter by type and month/year
-- **Categories** — 14 default categories created with each account, plus custom categories (add/edit/delete/restore defaults)
-- **Budget** — monthly budget, spending, remaining amount, progress bar and over-budget warning
-- **Reports** — date-range filter, income and expense reports, category charts, income vs expense chart
-- **Profile & Settings** — update name/email/opening balance, change password, theme toggle, logout
-- **Responsive UI** — desktop sidebar, mobile drawer, cards instead of tables on small screens
-- **Dark mode** — optional, saved in local storage
+- JWT login and registration with bcrypt password hashing
+- Per-user data isolation — every transaction, category, and budget is scoped to the signed-in user
+- Transactions with title, amount, type, category, date, payment method, and notes
+- 14 default income/expense categories, with a “Restore defaults” action
+- Monthly budgets with spending, remaining amount, percentage, and exceeded state
+- Dashboard with balance, current-month summary, 6-month chart, category breakdown, and recent transactions
+- Reports with date range, type filter, monthly totals, and category breakdowns
+- Profile and password settings, including opening balance
+- Responsive light/dark UI, all currency formatted as INR
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React + Vite, React Router, Tailwind CSS, Axios, Recharts, Lucide React |
+| API | Express on a Cloudflare Worker (`nodejs_compat`) |
+| Database | Cloudflare D1 (SQLite) |
+| Auth | JWT stored in `localStorage`, bcryptjs hashing |
+| Deployment | Wrangler / Cloudflare Workers |
+
+## Requirements
+
+- Node.js 20.19 or newer
+- A free Cloudflare account
+- Wrangler (installed as a dev dependency)
+
+No MongoDB installation or Atlas account is required.
 
 ---
 
-## Tech stack
+## Local development
 
-| Frontend | Backend | Database |
-| --- | --- | --- |
-| React 18 + Vite | Node.js + Express | MongoDB + Mongoose |
-| Tailwind CSS | JWT authentication | |
-| Axios | bcryptjs | |
-| Recharts | Separate routes/controllers/middleware | |
-| Lucide React | | |
+### 1. Install dependencies
 
----
-
-## Installation
-
-### 1. Requirements
-
-- Node.js 20.19 or newer (Mongoose 9 requirement)
-- npm
-- MongoDB running locally **or** a MongoDB Atlas connection string
-
-### 2. Install dependencies
-
-From the project root:
-
-```bash
+```powershell
 npm run install:all
 ```
 
-This installs the root tools plus `server/` and `client/` dependencies.
+### 2. Configure local secrets
 
-### 3. Configure environment variables
-
-Copy the example files and edit them:
-
-```bash
-# Windows PowerShell
-Copy-Item server\.env.example server\.env
-Copy-Item client\.env.example client\.env
+```powershell
+Copy-Item .dev.vars.example .dev.vars
 ```
 
-`server/.env`:
+Edit `.dev.vars` and set a long random `JWT_SECRET`:
 
-```env
-PORT=5000
-MONGO_URI=mongodb://127.0.0.1:27017/arthflow
-JWT_SECRET=replace_this_with_a_long_random_secret_key
+```text
+JWT_SECRET=replace_with_a_long_random_secret
 JWT_EXPIRES_IN=30d
-CLIENT_URL=http://localhost:5173
+CLIENT_URL=http://localhost:5000
 ```
 
-For MongoDB Atlas, replace `MONGO_URI` with your Atlas connection string (include the database name).
+The D1 database is bound as `DB` in `wrangler.jsonc`; there is no `MONGO_URI`.
 
-`client/.env`:
+### 3. Create the local D1 schema
 
-```env
-VITE_API_URL=http://localhost:5000/api
+```powershell
+npm run db:setup
 ```
 
-> Use a long, random `JWT_SECRET` in production.
+### 4. Optional demo data
 
-### 4. Start the app
-
-```bash
-npm run dev
-```
-
-This runs both servers:
-
-- Frontend: http://localhost:5173
-- Backend: http://localhost:5000/api/health
-
-Open the frontend, click **Create an account**, and start using ArthFlow.
-
----
-
-## Demo data (optional)
-
-To load a demo account with 30+ transactions across 4 months, categories and budgets:
-
-```bash
+```powershell
 npm run seed
 ```
 
-Then log in with:
+This creates the demo account plus 30 transactions across 4 months and 4 monthly budgets. It is repeatable — running it again replaces the demo user's data.
 
-```
+```text
 Email:    demo@arthflow.app
 Password: demo1234
 ```
 
-The seed script only inserts sample records when you run it. The application itself always reads real data from MongoDB through the API — there is no static data in the UI.
+### 5. Run the app
+
+```powershell
+npm run dev
+```
+
+- API + Worker: <http://localhost:5000>
+- Frontend (Vite): <http://localhost:5173>
+
+The frontend uses `VITE_API_URL` from `client/.env` in development. Keep:
+
+```text
+VITE_API_URL=http://localhost:5000/api
+```
+
+In production the frontend calls the same-origin `/api`, so `VITE_API_URL` is not needed.
 
 ---
 
-## Deploy to Cloudflare (frontend + API in one Worker)
+## Deploy to Cloudflare
 
-The React build is served by a Cloudflare Worker. The Express API and MongoDB connection run in a single Durable Object attached to that Worker:
+### 1. Log in
 
-- `https://<your-worker>.workers.dev/` → React app
-- `https://<your-worker>.workers.dev/api/...` → REST API
-
-This follows Cloudflare's recommended Mongoose-on-Workers pattern. It is intended for a personal, low-traffic app; very high concurrency is not recommended.
-
-The production build calls `/api` on the same origin, so **`VITE_API_URL` is not needed in production**.
-
-### 1. Create a free MongoDB Atlas cluster
-
-1. Sign up at <https://www.mongodb.com/atlas> and create a project.
-2. Click **Create** → **Shared / M0 Free**, choose a cloud provider and region, then create the cluster.
-3. **Database Access** → **Add new database user** → choose **Password** authentication. Use a strong password and the role **Read and write to any database**. Save the password.
-4. **Network Access** → **Add IP Address** → add `0.0.0.0/0` so Cloudflare Workers can reach the cluster, then confirm. (Keep the database user password strong.)
-5. **Connect** → **Drivers** → **Node.js** → copy the connection string. It looks like:
-
-   ```text
-   mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
-   ```
-
-   Insert your database name after `.mongodb.net/`:
-
-   ```text
-   mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/arthflow?retryWrites=true&w=majority
-   ```
-
-   If the password contains special characters, URL-encode them.
-
-### 2. Deploy the Worker
-
-From the project root:
-
-```bash
-npm install
+```powershell
 npx wrangler login
+```
 
-npx wrangler secret put MONGO_URI      # paste the Atlas URI from step 1
-npx wrangler secret put JWT_SECRET     # a long random string, e.g. from a password generator
+### 2. Create the D1 database
 
+```powershell
+npx wrangler d1 create arthflow-db
+```
+
+Copy the returned `database_id` into `wrangler.jsonc`, replacing the placeholder:
+
+```jsonc
+"d1_databases": [
+  {
+    "binding": "DB",
+    "database_name": "arthflow-db",
+    "database_id": "REPLACE_WITH_THE_ID_FROM_WRANGLER"
+  }
+]
+```
+
+If you choose a different database name, update `database_name` too.
+
+### 3. Apply the schema to the deployed database
+
+```powershell
+npm run db:setup:remote
+```
+
+### 4. Set the production JWT secret
+
+Generate one:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
+
+Then set it:
+
+```powershell
+npx wrangler secret put JWT_SECRET
+```
+
+Optional:
+
+```powershell
+npx wrangler secret put JWT_EXPIRES_IN   # default: 30d
+npx wrangler secret put CLIENT_URL       # only if using a separate custom frontend domain
+```
+
+### 5. Deploy
+
+```powershell
 npm run deploy
 ```
 
 Wrangler prints the live URL, for example `https://arthflow.<account>.workers.dev`.
 
-> Set both secrets **before** the first deploy — the Worker connects to MongoDB when it starts.
+### 6. Optional demo data in production
 
-Optional extras:
-
-```bash
-npx wrangler secret put JWT_EXPIRES_IN  # default: 30d
-npx wrangler secret put CLIENT_URL      # only needed for a separate custom frontend domain
+```powershell
+npm run seed:remote
 ```
 
-### 3. Verify
-
-1. Open `https://<your-worker>.workers.dev/api/health` — it should return `{"status":"ok"}`.
-2. Open the site and register an account, or load demo data into Atlas from your machine:
-
-   ```bash
-   # PowerShell, from the project root
-   $env:MONGO_URI = "mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/arthflow?retryWrites=true&w=majority"
-   npm run seed
-   ```
-
-   Then log in with `demo@arthflow.app` / `demo1234`. Your local IP must be allowed in Atlas Network Access for this step.
-
-### 4. Local Worker test (optional)
-
-```bash
-Copy-Item .dev.vars.example .dev.vars   # fill in MONGO_URI / JWT_SECRET
-npm run cf:dev
-```
-
-This runs the same Worker bundle locally (default <http://localhost:8787>) using `.dev.vars`. It is gitignored.
-
----
-
-## Available scripts
-
-Run these from the project root:
-
-| Command | Description |
-| --- | --- |
-| `npm run install:all` | Install all dependencies |
-| `npm run dev` | Start server + client together |
-| `npm run dev:server` | Start only the backend (port 5000) |
-| `npm run dev:client` | Start only the frontend (port 5173) |
-| `npm run seed` | Insert demo data |
-| `npm run build` | Build the production frontend |
-| `npm start` | Start the backend in production mode |
-| `npm run cf:dev` | Test the Cloudflare Worker locally (needs `.dev.vars`) |
-| `npm run deploy:dry-run` | Build and validate the Worker bundle without uploading |
-| `npm run deploy` | Build and deploy frontend + API to Cloudflare |
-
----
-
-## Balance calculations
-
-Each transaction is counted exactly once according to its `type`:
+### 7. Verify
 
 ```text
-Total Income   = sum of all income transactions
-Total Expenses = sum of all expense transactions
-Total Savings  = Total Income - Total Expenses
-Total Balance  = Opening Balance + Total Income - Total Expenses
+https://<your-worker>.workers.dev/api/health
 ```
 
-The **Opening Balance** can be edited on the Profile & Settings page. All budgets, charts and reports are calculated from stored transactions.
+Expected:
+
+```json
+{ "status": "ok", "message": "ArthFlow API is running" }
+```
+
+Then open the site, register an account, or log in with the demo credentials if you seeded it.
+
+Open a nested route such as `/transactions` directly — the Worker serves `index.html` for SPA routes.
 
 ---
 
-## API overview
+## Scripts
 
-All routes except auth register/login require `Authorization: Bearer <jwt>`.
+| Command | Purpose |
+|---|---|
+| `npm run install:all` | Install root, server, and client dependencies |
+| `npm run dev` | Run the Worker API and Vite frontend together |
+| `npm run cf:dev` | Run only the Worker + local D1 on port 5000 |
+| `npm run db:setup` | Apply `schema.sql` to local D1 |
+| `npm run db:setup:remote` | Apply `schema.sql` to deployed D1 |
+| `npm run seed` | Load repeatable demo data into local D1 |
+| `npm run seed:remote` | Load demo data into deployed D1 |
+| `npm run build` | Build the React production bundle |
+| `npm run deploy:dry-run` | Build and validate the Worker bundle without deploying |
+| `npm run deploy` | Build and deploy to Cloudflare |
+
+---
+
+## REST API
+
+All protected routes require `Authorization: Bearer <token>`.
 
 | Method | Endpoint | Description |
-| --- | --- | --- |
-| POST | `/api/auth/register` | Create account (also creates default categories) |
-| POST | `/api/auth/login` | Log in, receive JWT |
+|---|---|---|
+| POST | `/api/auth/register` | Create account and default categories |
+| POST | `/api/auth/login` | Log in and receive JWT |
 | GET | `/api/auth/me` | Current user |
-| POST | `/api/auth/logout` | Logout acknowledgement |
+| POST | `/api/auth/logout` | Acknowledge logout |
 | GET | `/api/user/profile` | Get profile |
 | PUT | `/api/user/profile` | Update name, email, opening balance |
 | PUT | `/api/user/password` | Change password |
-| GET | `/api/transactions` | List with `type`, `month`, `year`, `search`, `startDate`, `endDate` |
+| GET | `/api/categories` | List categories, optional `?type=` |
+| GET | `/api/categories/:id` | Get one category |
+| POST | `/api/categories` | Create category |
+| PUT | `/api/categories/:id` | Update category |
+| DELETE | `/api/categories/:id` | Delete category |
+| POST | `/api/categories/restore-defaults` | Restore missing defaults |
+| GET | `/api/transactions` | List with `type`, `month`, `year`, `startDate`, `endDate`, `search` |
 | GET | `/api/transactions/:id` | Get one transaction |
 | POST | `/api/transactions` | Create transaction |
 | PUT | `/api/transactions/:id` | Update transaction |
 | DELETE | `/api/transactions/:id` | Delete transaction |
-| GET | `/api/categories` | List categories (optional `type`) |
-| GET/POST | `/api/categories`, `/api/categories/:id` | Category CRUD |
-| POST | `/api/categories/restore-defaults` | Add missing default categories |
-| GET | `/api/budget?month=&year=` | Budget + spending + remaining for a month |
-| GET | `/api/budget/list` | All saved budgets |
-| POST | `/api/budget` | Create/update a monthly budget |
-| PUT/DELETE | `/api/budget/:id` | Update/delete a budget |
-| GET | `/api/dashboard` | All dashboard statistics |
-| GET | `/api/reports?startDate=&endDate=&type=` | Report for a date range |
-
-Every database query is scoped to `req.user.id`, so users can only see and change their own data.
+| GET | `/api/budget` | Budget + spending for a month |
+| GET | `/api/budget/list` | Budget history |
+| POST | `/api/budget` | Create or update monthly budget |
+| PUT | `/api/budget/:id` | Update budget |
+| DELETE | `/api/budget/:id` | Delete budget |
+| GET | `/api/dashboard` | Dashboard summary |
+| GET | `/api/reports` | Date-range report |
 
 ---
 
 ## Project structure
 
 ```text
-arthflow/
-├── client/
+.
+├── client/                 React + Vite + Tailwind frontend
 │   └── src/
-│       ├── components/   Reusable UI (cards, charts, forms, lists, modal…)
-│       ├── pages/        Login, Dashboard, Transactions, Categories, Budget, Reports, Profile
-│       ├── layouts/      MainLayout (sidebar/header) and AuthLayout
-│       ├── hooks/        useAsync
-│       ├── services/     Axios instance + one service per API resource
-│       ├── context/      Auth, Theme and Toast contexts
-│       └── utils/        Currency, date and chart constants
+│       ├── components/     Reusable UI
+│       ├── context/        Auth and theme providers
+│       ├── pages/          App screens
+│       ├── services/       Axios API calls
+│       └── utils/          Currency/date helpers
 ├── server/
-│   ├── config/           MongoDB connection
-│   ├── models/           User, Transaction, Category, Budget
-│   ├── controllers/      Request handling and calculations
-│   ├── routes/           REST endpoints
-│   ├── middleware/       JWT protection, validation, error handling
-│   ├── utils/            Helpers and demo seed script
-│   ├── app.js            Express app factory (shared by Node and Worker)
-│   ├── server.js         Local/production Node entry point
-│   └── worker.mjs        Cloudflare Worker entry point
-├── server/.env.example
-├── client/.env.example
-├── wrangler.jsonc        Cloudflare Worker + assets config
-├── .dev.vars.example     Local Worker secrets template
-└── README.md
+│   ├── app.js              Express app factory
+│   ├── worker.mjs          Cloudflare Worker entry point
+│   ├── controllers/        Request handlers (D1 queries)
+│   ├── db/
+│   │   ├── schema.sql      D1 tables and indexes
+│   │   └── store.js        Small parameterized SQL data layer
+│   ├── middleware/         Auth, validation, error handling
+│   ├── routes/             Express routes
+│   └── utils/              Constants, dates, validation, seed
+├── wrangler.jsonc          Worker assets, D1 binding, variables
+├── .dev.vars.example       Local secret template
+└── package.json            Root scripts
 ```
 
 ---
 
+## Notes on D1
+
+- D1 is Cloudflare's managed SQLite database. Free plan limits are generous for a personal app: 500 MB per database, 5 GB total, 5 million rows read/day, and 100,000 rows written/day.
+- All queries are parameterized. Every user-scoped query includes `userId`.
+- IDs are UUID strings stored in `_id`, matching the field name the frontend already uses.
+- Dates are stored as ISO strings, matching the previous JSON date format.
+- `server/db/seed.generated.sql` is generated by the seed script and gitignored.
+
 ## Troubleshooting
 
-- **Backend cannot connect to MongoDB** — check `MONGO_URI` in `server/.env` and make sure MongoDB is running.
-- **Frontend shows network errors** — make sure the backend is running and `VITE_API_URL` in `client/.env` points to it. Restart Vite after changing `.env`.
-- **Charts look empty on a new account** — add a few transactions; all charts are generated from real MongoDB data.
+| Problem | Fix |
+|---|---|
+| `D1 database binding is not available` | Run `npm run cf:dev`, not `node server/server.js` |
+| `Unknown database arthflow-db` | Check `database_name`/`database_id` in `wrangler.jsonc`, then run `npm run db:setup` |
+| 401 on every protected route | `JWT_SECRET` missing or changed; set it again with `wrangler secret put JWT_SECRET` |
+| CORS error in local dev | Set `CLIENT_URL=http://localhost:5000` in `.dev.vars` |
+| Demo login fails on deployed site | Run `npm run seed:remote` |
+| Deploy fails before using D1 | Make sure the placeholder `database_id` was replaced after `wrangler d1 create` |

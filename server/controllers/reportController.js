@@ -1,4 +1,4 @@
-const Transaction = require('../models/Transaction');
+const { dbOf, toISO, listTransactions } = require('../db/store');
 const { monthKey, monthsBetween, parseInputDate } = require('../utils/dateHelpers');
 
 // GET /api/reports?startDate=2026-01-01&endDate=2026-12-31&type=expense
@@ -12,12 +12,13 @@ const getReport = async (req, res) => {
       return res.status(400).json({ message: 'Start date must be before end date' });
     }
 
-    const filter = { userId: req.user.id, date: { $gte: start, $lte: end } };
-    if (req.query.type === 'income' || req.query.type === 'expense') {
-      filter.type = req.query.type;
-    }
-
-    const transactions = await Transaction.find(filter).sort({ date: -1 }).lean();
+    const transactions = await listTransactions(dbOf(req), {
+      userId: req.user.id,
+      type: req.query.type,
+      dateFrom: toISO(start),
+      dateTo: toISO(end),
+      dateToInclusive: true,
+    });
 
     let totalIncome = 0;
     let totalExpenses = 0;

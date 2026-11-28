@@ -1,55 +1,62 @@
-const Transaction = require('../models/Transaction');
-const Category = require('../models/Category');
-const { escapeRegex } = require('../utils/validation');
+const {
+  dbOf,
+  toISO,
+  listTransactions,
+  getTransaction,
+  createTransaction,
+  updateTransaction,
+  deleteTransaction,
+  findCategoryByName,
+} = require('../db/store');
 const { monthRange, parseInputDate } = require('../utils/dateHelpers');
 
 // Check that the chosen category exists for this user and this transaction type.
-const checkCategory = async (userId, name, type) => {
-  const category = await Category.findOne({ userId, name, type });
+const checkCategory = async (db, userId, name, type) => {
+  const category = await findCategoryByName(db, userId, name, type);
   if (!category) {
     throw Object.assign(new Error(`"${name}" is not a saved ${type} category`), { status: 400 });
   }
 };
 
-// Build a MongoDB filter from the query string.
+// Build D1 query options from the query string.
 const buildFilter = (req) => {
-  const filter = { userId: req.user.id };
+  const options = { userId: req.user.id };
 
   if (req.query.type === 'income' || req.query.type === 'expense') {
-    filter.type = req.query.type;
+    options.type = req.query.type;
   }
 
   const month = Number(req.query.month);
   const year = Number(req.query.year);
   if (month >= 1 && month <= 12 && year >= 2000) {
     const { start, end } = monthRange(month, year);
-    filter.date = { $gte: start, $lt: end };
+    options.dateFrom = toISO(start);
+    options.dateTo = toISO(end);
   }
 
   if (req.query.startDate || req.query.endDate) {
-    filter.date = filter.date || {};
-    if (req.query.startDate) filter.date.$gte = parseInputDate(req.query.startDate);
+    if (req.query.startDate) {
+      options.dateFrom = toISO(parseInputDate(req.query.startDate));
+    }
     if (req.query.endDate) {
       const end = parseInputDate(req.query.endDate);
       end.setHours(23, 59, 59, 999);
-      filter.date.$lte = end;
+      options.dateTo = toISO(end);
+      options.dateToInclusive = true;
     }
   }
 
   if (req.query.search && req.query.search.trim()) {
-    filter.title = { $regex: escapeRegex(req.query.search.trim()), $options: 'i' };
+    options.search = req.query.search.trim();
   }
 
-  return filter;
+  return options;
 };
 
 // GET /api/transactions
 const getTransactions = async (req, res) => {
   try {
-    const transactions = await Transaction.find(buildFilter(req))
-      .sort({ date: -1, createdAt: -1 })
-      .lean();
-
+    const transactions = await listTransactions(dbOf(req), buildFilter(req));
     return res.json({ count: transactions.length, transactions });
   } catch (error) {
     return res.status(error.status || 500).json({ message: error.message });
@@ -57,9 +64,9 @@ const getTransactions = async (req, res) => {
 };
 
 // GET /api/transactions/:id
-const getTransaction = async (req, res) => {
+const getTransactionById = async (req, res) => {
   try {
-    const transaction = await Transaction.findOne({ _id: req.params.id, userId: req.user.id });
+    const transaction = await getTransaction(dbOf(req), req.params.id, req.user.id);
     if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
     return res.json({ transaction });
   } catch (error) {
@@ -68,19 +75,20 @@ const getTransaction = async (req, res) => {
 };
 
 // POST /api/transactions
-const createTransaction = async (req, res) => {
+const createTransactionHandler = async (req, res) => {
   try {
+    const db = dbOf(req);
     const { title, amount, type, category, paymentMethod, description } = req.body;
 
-    await checkCategory(req.user.id, category, type);
+    await checkCategory(db, req.user.id, category, type);
 
-    const transaction = await Transaction.create({
+    const transaction = await createTransaction(db, {
       userId: req.user.id,
       title: title.trim(),
       amount: Number(amount),
       type,
       category,
-      date: parseInputDate(req.body.date),
+      date: toISO(parseInputDate(req.body.date)),
       paymentMethod: paymentMethod ? paymentMethod.trim() : 'Cash',
       description: description ? description.trim() : '',
     });
@@ -92,40 +100,39 @@ const createTransaction = async (req, res) => {
 };
 
 // PUT /api/transactions/:id
-const updateTransaction = async (req, res) => {
+const updateTransactionHandler = async (req, res) => {
   try {
-    const transaction = await Transaction.findOne({ _id: req.params.id, userId: req.user.id });
+    const db = dbOf(req);
+    const transaction = await getTransaction(db, req.params.id, req.user.id);
     if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
 
     const { title, amount, type, category, date, paymentMethod, description } = req.body;
     const nextType = type || transaction.type;
     const nextCategory = category || transaction.category;
 
-    await checkCategory(req.user.id, nextCategory, nextType);
+    await checkCategory(db, req.user.id, nextCategory, nextType);
 
-    transaction.title = title.trim();
-    transaction.amount = Number(amount);
-    transaction.type = nextType;
-    transaction.category = nextCategory;
-    transaction.date = parseInputDate(date);
-    transaction.paymentMethod = paymentMethod ? paymentMethod.trim() : transaction.paymentMethod;
-    transaction.description = description ? description.trim() : '';
-    await transaction.save();
+    const updated = await updateTransaction(db, transaction._id, req.user.id, {
+      title: title.trim(),
+      amount: Number(amount),
+      type: nextType,
+      category: nextCategory,
+      date: date ? toISO(parseInputDate(date)) : undefined,
+      paymentMethod: paymentMethod ? paymentMethod.trim() : transaction.paymentMethod,
+      description: description ? description.trim() : '',
+    });
 
-    return res.json({ transaction });
+    return res.json({ transaction: updated });
   } catch (error) {
     return res.status(error.status || 500).json({ message: error.message });
   }
 };
 
 // DELETE /api/transactions/:id
-const deleteTransaction = async (req, res) => {
+const deleteTransactionHandler = async (req, res) => {
   try {
-    const transaction = await Transaction.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.user.id,
-    });
-    if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
+    const deleted = await deleteTransaction(dbOf(req), req.params.id, req.user.id);
+    if (!deleted) return res.status(404).json({ message: 'Transaction not found' });
     return res.json({ message: 'Transaction deleted successfully' });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -133,5 +140,9 @@ const deleteTransaction = async (req, res) => {
 };
 
 module.exports = {
-  getTransactions, getTransaction, createTransaction, updateTransaction, deleteTransaction,
+  getTransactions,
+  getTransaction: getTransactionById,
+  createTransaction: createTransactionHandler,
+  updateTransaction: updateTransactionHandler,
+  deleteTransaction: deleteTransactionHandler,
 };

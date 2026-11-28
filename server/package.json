@@ -2,20 +2,19 @@
   "name": "arthflow-server",
   "version": "1.0.0",
   "private": true,
-  "description": "REST API for ArthFlow (Node.js and Cloudflare Workers)",
+  "description": "REST API for ArthFlow (Express on Cloudflare Workers with D1)",
   "main": "server.js",
   "scripts": {
-    "dev": "node --watch server.js",
-    "start": "node server.js",
-    "seed": "node utils/seed.js"
+    "dev": "wrangler dev --config ../wrangler.jsonc --port 5000",
+    "start": "wrangler dev --config ../wrangler.jsonc --port 5000",
+    "seed": "node utils/seed.js --local",
+    "seed:remote": "node utils/seed.js --remote"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^9.13.1"
+    "jsonwebtoken": "^9.0.2"
   },
   "overrides": {
     "iconv-lite": "^0.6.3"

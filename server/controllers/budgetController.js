@@ -1,5 +1,13 @@
-const Budget = require('../models/Budget');
-const Transaction = require('../models/Transaction');
+const {
+  dbOf,
+  toISO,
+  listTransactions,
+  getBudget,
+  listBudgets,
+  upsertBudget,
+  updateBudget,
+  deleteBudget,
+} = require('../db/store');
 const { monthRange, monthKey } = require('../utils/dateHelpers');
 
 // Shared calculation so the Budget and Dashboard pages show the same numbers.
@@ -18,18 +26,27 @@ const withStats = (budget, expenses, month, year) => {
   };
 };
 
+const expensesForMonth = (db, userId, month, year) => {
+  const { start, end } = monthRange(month, year);
+  return listTransactions(db, {
+    userId,
+    type: 'expense',
+    dateFrom: toISO(start),
+    dateTo: toISO(end),
+  });
+};
+
 // GET /api/budget?month=11&year=2026
-const getBudget = async (req, res) => {
+const getBudgetHandler = async (req, res) => {
   try {
+    const db = dbOf(req);
     const now = new Date();
     const month = Number(req.query.month) || now.getMonth() + 1;
     const year = Number(req.query.year) || now.getFullYear();
-    const { start, end } = monthRange(month, year);
 
     const [budget, expenses] = await Promise.all([
-      Budget.findOne({ userId: req.user.id, month, year }),
-      Transaction.find({ userId: req.user.id, type: 'expense', date: { $gte: start, $lt: end } })
-        .select('amount'),
+      getBudget(db, req.user.id, month, year),
+      expensesForMonth(db, req.user.id, month, year),
     ]);
 
     return res.json(withStats(budget, expenses, month, year));
@@ -39,11 +56,12 @@ const getBudget = async (req, res) => {
 };
 
 // GET /api/budget/list
-const listBudgets = async (req, res) => {
+const listBudgetsHandler = async (req, res) => {
   try {
+    const db = dbOf(req);
     const [budgets, expenses] = await Promise.all([
-      Budget.find({ userId: req.user.id }).sort({ year: -1, month: -1 }),
-      Transaction.find({ userId: req.user.id, type: 'expense' }).select('amount date'),
+      listBudgets(db, req.user.id),
+      listTransactions(db, { userId: req.user.id, type: 'expense' }),
     ]);
 
     const spendingByMonth = {};
@@ -66,22 +84,15 @@ const listBudgets = async (req, res) => {
 };
 
 // POST /api/budget (creates or updates the budget for a month)
-const upsertBudget = async (req, res) => {
+const upsertBudgetHandler = async (req, res) => {
   try {
+    const db = dbOf(req);
     const { month, year, amount } = req.body;
+    const nextMonth = Number(month);
+    const nextYear = Number(year);
 
-    const budget = await Budget.findOneAndUpdate(
-      { userId: req.user.id, month: Number(month), year: Number(year) },
-      { $set: { amount: Number(amount) } },
-      { returnDocument: 'after', upsert: true, runValidators: true, setDefaultsOnInsert: true }
-    );
-
-    const { start, end } = monthRange(budget.month, budget.year);
-    const expenses = await Transaction.find({
-      userId: req.user.id,
-      type: 'expense',
-      date: { $gte: start, $lt: end },
-    }).select('amount');
+    const budget = await upsertBudget(db, req.user.id, nextMonth, nextYear, Number(amount));
+    const expenses = await expensesForMonth(db, req.user.id, budget.month, budget.year);
 
     return res.status(201).json(withStats(budget, expenses, budget.month, budget.year));
   } catch (error) {
@@ -90,16 +101,15 @@ const upsertBudget = async (req, res) => {
 };
 
 // PUT /api/budget/:id
-const updateBudget = async (req, res) => {
+const updateBudgetHandler = async (req, res) => {
   try {
-    const budget = await Budget.findOne({ _id: req.params.id, userId: req.user.id });
+    const db = dbOf(req);
+    const budget = await updateBudget(db, req.params.id, req.user.id, {
+      amount: Number(req.body.amount),
+      month: req.body.month ? Number(req.body.month) : undefined,
+      year: req.body.year ? Number(req.body.year) : undefined,
+    });
     if (!budget) return res.status(404).json({ message: 'Budget not found' });
-
-    budget.amount = Number(req.body.amount);
-    if (req.body.month) budget.month = Number(req.body.month);
-    if (req.body.year) budget.year = Number(req.body.year);
-    await budget.save();
-
     return res.json({ budget });
   } catch (error) {
     return res.status(error.status || 500).json({ message: error.message });
@@ -107,14 +117,20 @@ const updateBudget = async (req, res) => {
 };
 
 // DELETE /api/budget/:id
-const deleteBudget = async (req, res) => {
+const deleteBudgetHandler = async (req, res) => {
   try {
-    const budget = await Budget.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
-    if (!budget) return res.status(404).json({ message: 'Budget not found' });
+    const deleted = await deleteBudget(dbOf(req), req.params.id, req.user.id);
+    if (!deleted) return res.status(404).json({ message: 'Budget not found' });
     return res.json({ message: 'Budget deleted successfully' });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
 };
 
-module.exports = { getBudget, listBudgets, upsertBudget, updateBudget, deleteBudget };
+module.exports = {
+  getBudget: getBudgetHandler,
+  listBudgets: listBudgetsHandler,
+  upsertBudget: upsertBudgetHandler,
+  updateBudget: updateBudgetHandler,
+  deleteBudget: deleteBudgetHandler,
+};

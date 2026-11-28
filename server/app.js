@@ -39,6 +39,15 @@ const createApp = () => {
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok', message: 'ArthFlow API is running' }));
 
+  // The Worker injects env.DB into app.locals. Health checks stay available
+  // even when the binding is missing.
+  app.use('/api', (req, res, next) => {
+    if (!req.app.locals.db) {
+      return res.status(500).json({ message: 'D1 database binding is not available' });
+    }
+    return next();
+  });
+
   app.use('/api/auth', authRoutes);
   app.use('/api/user', userRoutes);
   app.use('/api/transactions', transactionRoutes);
