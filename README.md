@@ -26,7 +26,7 @@ Everything is displayed in **Indian Rupees (₹)** using `Intl.NumberFormat('en-
 | --- | --- | --- |
 | React 18 + Vite | Node.js + Express | MongoDB + Mongoose |
 | Tailwind CSS | JWT authentication | |
-| Axios | bcrypt | |
+| Axios | bcryptjs | |
 | Recharts | Separate routes/controllers/middleware | |
 | Lucide React | | |
 
@@ -36,7 +36,7 @@ Everything is displayed in **Indian Rupees (₹)** using `Intl.NumberFormat('en-
 
 ### 1. Requirements
 
-- Node.js 18 or newer
+- Node.js 20.19 or newer (Mongoose 9 requirement)
 - npm
 - MongoDB running locally **or** a MongoDB Atlas connection string
 
@@ -114,6 +114,84 @@ The seed script only inserts sample records when you run it. The application its
 
 ---
 
+## Deploy to Cloudflare (frontend + API in one Worker)
+
+The React build and the Express API are served by a single Cloudflare Worker:
+
+- `https://<your-worker>.workers.dev/` → React app
+- `https://<your-worker>.workers.dev/api/...` → REST API
+
+The production build calls `/api` on the same origin, so **`VITE_API_URL` is not needed in production**.
+
+### 1. Create a free MongoDB Atlas cluster
+
+1. Sign up at <https://www.mongodb.com/atlas> and create a project.
+2. Click **Create** → **Shared / M0 Free**, choose a cloud provider and region, then create the cluster.
+3. **Database Access** → **Add new database user** → choose **Password** authentication. Use a strong password and the role **Read and write to any database**. Save the password.
+4. **Network Access** → **Add IP Address** → add `0.0.0.0/0` so Cloudflare Workers can reach the cluster, then confirm. (Keep the database user password strong.)
+5. **Connect** → **Drivers** → **Node.js** → copy the connection string. It looks like:
+
+   ```text
+   mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+   ```
+
+   Insert your database name after `.mongodb.net/`:
+
+   ```text
+   mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/arthflow?retryWrites=true&w=majority
+   ```
+
+   If the password contains special characters, URL-encode them.
+
+### 2. Deploy the Worker
+
+From the project root:
+
+```bash
+npm install
+npx wrangler login
+
+npx wrangler secret put MONGO_URI      # paste the Atlas URI from step 1
+npx wrangler secret put JWT_SECRET     # a long random string, e.g. from a password generator
+
+npm run deploy
+```
+
+Wrangler prints the live URL, for example `https://arthflow.<account>.workers.dev`.
+
+> Set both secrets **before** the first deploy — the Worker connects to MongoDB when it starts.
+
+Optional extras:
+
+```bash
+npx wrangler secret put JWT_EXPIRES_IN  # default: 30d
+npx wrangler secret put CLIENT_URL      # only needed for a separate custom frontend domain
+```
+
+### 3. Verify
+
+1. Open `https://<your-worker>.workers.dev/api/health` — it should return `{"status":"ok"}`.
+2. Open the site and register an account, or load demo data into Atlas from your machine:
+
+   ```bash
+   # PowerShell, from the project root
+   $env:MONGO_URI = "mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/arthflow?retryWrites=true&w=majority"
+   npm run seed
+   ```
+
+   Then log in with `demo@arthflow.app` / `demo1234`. Your local IP must be allowed in Atlas Network Access for this step.
+
+### 4. Local Worker test (optional)
+
+```bash
+Copy-Item .dev.vars.example .dev.vars   # fill in MONGO_URI / JWT_SECRET
+npm run cf:dev
+```
+
+This runs the same Worker bundle locally (default <http://localhost:8787>) using `.dev.vars`. It is gitignored.
+
+---
+
 ## Available scripts
 
 Run these from the project root:
@@ -127,6 +205,9 @@ Run these from the project root:
 | `npm run seed` | Insert demo data |
 | `npm run build` | Build the production frontend |
 | `npm start` | Start the backend in production mode |
+| `npm run cf:dev` | Test the Cloudflare Worker locally (needs `.dev.vars`) |
+| `npm run deploy:dry-run` | Build and validate the Worker bundle without uploading |
+| `npm run deploy` | Build and deploy frontend + API to Cloudflare |
 
 ---
 
@@ -197,9 +278,13 @@ arthflow/
 │   ├── routes/           REST endpoints
 │   ├── middleware/       JWT protection, validation, error handling
 │   ├── utils/            Helpers and demo seed script
-│   └── server.js         Express app entry point
+│   ├── app.js            Express app factory (shared by Node and Worker)
+│   ├── server.js         Local/production Node entry point
+│   └── worker.mjs        Cloudflare Worker entry point
 ├── server/.env.example
 ├── client/.env.example
+├── wrangler.jsonc        Cloudflare Worker + assets config
+├── .dev.vars.example     Local Worker secrets template
 └── README.md
 ```
 

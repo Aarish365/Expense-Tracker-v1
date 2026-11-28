@@ -73,7 +73,7 @@ const upsertBudget = async (req, res) => {
     const budget = await Budget.findOneAndUpdate(
       { userId: req.user.id, month: Number(month), year: Number(year) },
       { $set: { amount: Number(amount) } },
-      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+      { returnDocument: 'after', upsert: true, runValidators: true, setDefaultsOnInsert: true }
     );
 
     const { start, end } = monthRange(budget.month, budget.year);

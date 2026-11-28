@@ -2,7 +2,8 @@ import axios from 'axios';
 
 // VITE_API_URL is set in client/.env (see client/.env.example)
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  // Dev uses client/.env (localhost:5000). Production uses same-origin /api on Cloudflare.
+  baseURL: import.meta.env.PROD ? '/api' : (import.meta.env.VITE_API_URL || '/api'),
 });
 
 // Attach the JWT token to every request when the user is logged in.

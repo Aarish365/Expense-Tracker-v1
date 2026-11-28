@@ -2,7 +2,7 @@
   "name": "arthflow-server",
   "version": "1.0.0",
   "private": true,
-  "description": "REST API for ArthFlow",
+  "description": "REST API for ArthFlow (Node.js and Cloudflare Workers)",
   "main": "server.js",
   "scripts": {
     "dev": "node --watch server.js",
@@ -10,11 +10,14 @@
     "seed": "node utils/seed.js"
   },
   "dependencies": {
-    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.9.5"
+    "mongoose": "^9.13.1"
+  },
+  "overrides": {
+    "iconv-lite": "^0.6.3"
   }
 }
