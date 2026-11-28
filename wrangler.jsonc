@@ -3,6 +3,7 @@
   "name": "arthflow",
   "main": "./server/worker.mjs",
   "compatibility_date": "2026-11-28",
+  "workers_dev": true,
   "assets": {
     "directory": "./client/dist",
     "binding": "ASSETS",
@@ -13,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "arthflow-db",
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "90317286-8ca1-4f7a-a17e-a1dae8980208"
     }
   ],
   "vars": {

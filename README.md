@@ -282,3 +282,4 @@ All protected routes require `Authorization: Bearer <token>`.
 | CORS error in local dev | Set `CLIENT_URL=http://localhost:5000` in `.dev.vars` |
 | Demo login fails on deployed site | Run `npm run seed:remote` |
 | Deploy fails before using D1 | Make sure the placeholder `database_id` was replaced after `wrangler d1 create` |
+| Deploy says “register a workers.dev subdomain” | Open the onboarding link Wrangler prints once, then run `npm run deploy` again |
