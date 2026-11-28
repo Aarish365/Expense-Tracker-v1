@@ -116,10 +116,12 @@ The seed script only inserts sample records when you run it. The application its
 
 ## Deploy to Cloudflare (frontend + API in one Worker)
 
-The React build and the Express API are served by a single Cloudflare Worker:
+The React build is served by a Cloudflare Worker. The Express API and MongoDB connection run in a single Durable Object attached to that Worker:
 
 - `https://<your-worker>.workers.dev/` → React app
 - `https://<your-worker>.workers.dev/api/...` → REST API
+
+This follows Cloudflare's recommended Mongoose-on-Workers pattern. It is intended for a personal, low-traffic app; very high concurrency is not recommended.
 
 The production build calls `/api` on the same origin, so **`VITE_API_URL` is not needed in production**.
 

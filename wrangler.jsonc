@@ -9,6 +9,20 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ARTHFLOW_API",
+        "class_name": "ArthFlowAPI"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["ArthFlowAPI"]
+    }
+  ],
   "vars": {
     "JWT_EXPIRES_IN": "30d"
   },
